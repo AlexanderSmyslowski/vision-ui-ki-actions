@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import { z } from "zod";
 import { planFromInput } from "./planner/heuristicPlanner.js";
+import { captureScreenshotPng } from "./capture/screenshot.js";
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -28,8 +29,10 @@ app.get("/", (_req, res) => {
 
     <form id="f">
       <div class="row">
-        <input type="file" name="image" accept="image/*" required />
-        <button type="submit">Plan</button>
+        <input id="file" type="file" name="image" accept="image/*" required />
+        <button type="submit">Plan (Upload)</button>
+        <button id="btnShot" type="button">Plan (Screenshot)</button>
+        <button id="btnCam" type="button">Plan (Webcam Frame)</button>
       </div>
       <p><label>Instruction (optional):</label></p>
       <textarea name="instruction_text" placeholder="e.g. 'Buy this' or 'Open https://… and show issues'"></textarea>
@@ -41,13 +44,54 @@ app.get("/", (_req, res) => {
     <script>
       const form = document.getElementById('f');
       const out = document.getElementById('out');
+      async function showResult(r) {
+        const j = await r.json();
+        out.textContent = JSON.stringify(j, null, 2);
+      }
+
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
         out.textContent = 'Working…';
         const fd = new FormData(form);
         const r = await fetch('/api/plan', { method: 'POST', body: fd });
-        const j = await r.json();
-        out.textContent = JSON.stringify(j, null, 2);
+        await showResult(r);
+      });
+
+      document.getElementById('btnShot').addEventListener('click', async () => {
+        out.textContent = 'Capturing screenshot…';
+        const instruction_text = form.querySelector('textarea[name=instruction_text]').value;
+        const r = await fetch('/api/plan/screenshot', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ instruction_text })
+        });
+        await showResult(r);
+      });
+
+      document.getElementById('btnCam').addEventListener('click', async () => {
+        out.textContent = 'Capturing webcam frame…';
+        const instruction_text = form.querySelector('textarea[name=instruction_text]').value;
+
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const track = stream.getVideoTracks()[0];
+        const imageCapture = new ImageCapture(track);
+        const bitmap = await imageCapture.grabFrame();
+
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(bitmap, 0, 0);
+
+        track.stop();
+
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+        const fd = new FormData();
+        fd.append('image', blob, 'webcam.png');
+        fd.append('instruction_text', instruction_text);
+
+        const r = await fetch('/api/plan', { method: 'POST', body: fd });
+        await showResult(r);
       });
     </script>
   </body>
@@ -67,6 +111,20 @@ app.post("/api/plan", upload.single("image"), (req, res) => {
 
   const response = planFromInput({ instruction_text, imageMeta });
   res.json(response);
+});
+
+app.post("/api/plan/screenshot", async (req, res) => {
+  const { instruction_text } = PlanReqSchema.parse(req.body ?? {});
+  try {
+    const buf = await captureScreenshotPng();
+    const response = planFromInput({
+      instruction_text,
+      imageMeta: { mimeType: "image/png", sizeBytes: buf.byteLength },
+    });
+    res.json({ ...response, capture: "screenshot" });
+  } catch (e: any) {
+    res.status(500).json({ error: String(e?.message ?? e) });
+  }
 });
 
 const port = Number(process.env.PORT ?? 8787);
