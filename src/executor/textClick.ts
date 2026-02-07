@@ -22,7 +22,7 @@ export async function snapshotAi(targetId?: string): Promise<any> {
   }
 }
 
-export function findRefByText(snapshot: any, text: string, roles = ["link", "button"]): string {
+export function findRefByText(snapshot: any, text: string, roles = ["link", "button", "textbox"]): string {
   const needle = text.trim().toLowerCase();
   const refs: Record<string, { role?: string; name?: string }> = snapshot?.refs ?? {};
   const hits: Array<{ ref: string; role?: string; name?: string }> = [];

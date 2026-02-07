@@ -37,7 +37,9 @@ export function planFromInput(params: {
   // Draft plan is intentionally safe: never includes payment/submit; that would be critical.
   const draft_plan: IntentResponse["draft_plan"] = {
     summary: urlMatch
-      ? `Open the page ${urlMatch[0]} and ask for the goal.`
+      ? wantsIssues
+        ? `Open ${urlMatch[0]} and open Issues.`
+        : `Open the page ${urlMatch[0]} and ask for the goal.`
       : wantsBuy
         ? "Search the described item and add to cart; stop before checkout."
         : "Analyze and propose next steps; ask what to do with the content.",
@@ -45,7 +47,7 @@ export function planFromInput(params: {
     steps: urlMatch
       ? [
           { n: 1, text: `Open URL: ${urlMatch[0]}` },
-          { n: 2, text: "Ask: What do you want to do on this page?" },
+          ...(wantsIssues ? [{ n: 2, text: "Click: Issues" }] : [{ n: 2, text: "Ask: What do you want to do on this page?" }]),
         ]
       : [
           { n: 1, text: "Extract key information (text/numbers) from the image (or ask for clarification)." },

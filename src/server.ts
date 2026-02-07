@@ -33,6 +33,7 @@ app.get("/", (_req, res) => {
 
     <div class="row" style="margin-bottom: 12px;">
       <button id="btnDemoIssues" type="button">Demo: Open GitHub Repo → Issues</button>
+      <button id="btnDemoAmazon" type="button">Demo: Amazon.de Search “iPhone 15 case”</button>
     </div>
 
     <form id="f">
@@ -116,6 +117,12 @@ app.get("/", (_req, res) => {
         await showResult(r);
       });
 
+      document.getElementById('btnDemoAmazon').addEventListener('click', async () => {
+        out.textContent = 'Running demo (Amazon search)…';
+        const r = await fetch('/api/demo/amazon-search', { method: 'POST' });
+        await showResult(r);
+      });
+
       document.getElementById('btnExecute').addEventListener('click', async () => {
         out.textContent = 'Executing…';
         const confirmation = document.getElementById('confirm').value;
@@ -170,6 +177,59 @@ app.post("/api/demo/github-issues", async (_req, res) => {
     const ref = findRefByText(snap, "Issues", ["link", "button"]);
     await clickRef(ref, targetId || undefined);
     res.json({ ok: true, demo: "github-issues", url, clicked: { text: "Issues", ref }, targetId });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: String(e?.message ?? e) });
+  }
+});
+
+app.post("/api/demo/amazon-search", async (_req, res) => {
+  // Non-critical demo: open Amazon.de and search; no purchase.
+  const url = "https://www.amazon.de";
+  const query = "iPhone 15 case";
+
+  try {
+    const targetId = await openUrl(url);
+
+    // Best-effort cookie consent (DE/EN variants). Ignore failures.
+    try {
+      const snap = await snapshotAi(targetId || undefined);
+      const ref =
+        (() => {
+          try {
+            return findRefByText(snap, "Alle akzeptieren", ["button", "link"]);
+          } catch {
+            return findRefByText(snap, "Accept", ["button", "link"]);
+          }
+        })();
+      await clickRef(ref, targetId || undefined);
+    } catch {
+      // ignore
+    }
+
+    // Focus search box
+    const snap2 = await snapshotAi(targetId || undefined);
+    const searchRef =
+      (() => {
+        try {
+          return findRefByText(snap2, "Suche", ["textbox", "combobox", "searchbox"]);
+        } catch {
+          return findRefByText(snap2, "Search", ["textbox", "combobox", "searchbox"]);
+        }
+      })();
+
+    // click, type, enter
+    await clickRef(searchRef, targetId || undefined);
+    // openclaw browser type
+    const { runOpenclawBrowser } = await import("./executor/openclawBrowser.js");
+    const args = ["type", searchRef, query];
+    if (targetId) args.push("--target-id", targetId);
+    await runOpenclawBrowser(args, { timeoutMs: 60000 });
+
+    const args2 = ["press", "Enter"];
+    if (targetId) args2.push("--target-id", targetId);
+    await runOpenclawBrowser(args2, { timeoutMs: 60000 });
+
+    res.json({ ok: true, demo: "amazon-search", url, query, targetId });
   } catch (e: any) {
     res.status(500).json({ ok: false, error: String(e?.message ?? e) });
   }
