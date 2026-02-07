@@ -4,13 +4,13 @@
 on run
 	set repoDir to "/Users/hans_clawbot/.openclaw/workspace/vision-ui-ki-actions"	
 	set startScript to repoDir & "/scripts/mac/start_server.sh"
-	set port to "8787"
-	set localUrl to "http://localhost:" & port
+	set portStr to "8787"
+	set localUrl to "http://localhost:" & portStr
 
 	tell application "Terminal"
 		activate
 		-- open a new window/tab and run the server
-		do script "cd " & quoted form of repoDir & "; export PORT=" & port & "; " & quoted form of startScript
+		do script "cd " & quoted form of repoDir & "; export PORT=" & portStr & "; " & quoted form of startScript
 	end tell
 
 	tell application "System Events"
