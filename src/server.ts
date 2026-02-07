@@ -3,6 +3,7 @@ import multer from "multer";
 import { z } from "zod";
 import { planFromInput } from "./planner/heuristicPlanner.js";
 import { captureScreenshotPng } from "./capture/screenshot.js";
+import { clickRef, findRefByText, openUrl, snapshotAi } from "./executor/textClick.js";
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -26,6 +27,10 @@ app.get("/", (_req, res) => {
   <body>
     <h1>Vision UI → Actions (MVP)</h1>
     <p>Upload a photo/frame + optional instruction text. You’ll get: short analysis → proposal → questions → draft plan.</p>
+
+    <div class="row" style="margin-bottom: 12px;">
+      <button id="btnDemoIssues" type="button">Demo: Open GitHub Repo → Issues</button>
+    </div>
 
     <form id="f">
       <div class="row">
@@ -93,6 +98,12 @@ app.get("/", (_req, res) => {
         const r = await fetch('/api/plan', { method: 'POST', body: fd });
         await showResult(r);
       });
+
+      document.getElementById('btnDemoIssues').addEventListener('click', async () => {
+        out.textContent = 'Running demo (open repo → click Issues)…';
+        const r = await fetch('/api/demo/github-issues', { method: 'POST' });
+        await showResult(r);
+      });
     </script>
   </body>
 </html>`);
@@ -124,6 +135,21 @@ app.post("/api/plan/screenshot", async (req, res) => {
     res.json({ ...response, capture: "screenshot" });
   } catch (e: any) {
     res.status(500).json({ error: String(e?.message ?? e) });
+  }
+});
+
+app.post("/api/demo/github-issues", async (_req, res) => {
+  // Demonstrates: agentic action (open URL → snapshot → click by text)
+  // Non-critical demo: no login, no submit.
+  const url = "https://github.com/AlexanderSmyslowski/vision-ui-ki-actions";
+  try {
+    const targetId = await openUrl(url);
+    const snap = await snapshotAi(targetId || undefined);
+    const ref = findRefByText(snap, "Issues", ["link", "button"]);
+    await clickRef(ref, targetId || undefined);
+    res.json({ ok: true, demo: "github-issues", url, clicked: { text: "Issues", ref }, targetId });
+  } catch (e: any) {
+    res.status(500).json({ ok: false, error: String(e?.message ?? e) });
   }
 });
 
