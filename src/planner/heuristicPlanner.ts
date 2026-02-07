@@ -15,6 +15,7 @@ export function planFromInput(params: {
   const text = (instruction_text ?? "").trim();
   const urlMatch = text.match(/https?:\/\/\S+/i);
   const wantsBuy = /kauf|buy|bestell|order|checkout|add to cart/i.test(text);
+  const wantsIssues = /\bissues\b|\bissue\b|tickets?/i.test(text);
 
   let proposed_intent: IntentResponse["proposed_intent"] = "world_to_web.ask_then_plan";
   const questions: IntentResponse["questions"] = [];
@@ -70,8 +71,13 @@ export function planFromInput(params: {
   const plan: Plan | undefined = urlMatch
     ? {
         intent: proposed_intent,
-        summary: `Navigate to ${urlMatch[0]}`,
-        actions: [{ kind: "navigate", url: urlMatch[0], note: "Open target page" }],
+        summary: wantsIssues ? `Navigate to ${urlMatch[0]} and open Issues` : `Navigate to ${urlMatch[0]}`,
+        actions: [
+          { kind: "navigate", url: urlMatch[0], note: "Open target page" },
+          ...(wantsIssues
+            ? ([{ kind: "click", selector: { type: "text", value: "Issues" }, note: "Open Issues" }] as any)
+            : []),
+        ],
       }
     : undefined;
 

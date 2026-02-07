@@ -4,6 +4,9 @@ import { z } from "zod";
 import { planFromInput } from "./planner/heuristicPlanner.js";
 import { captureScreenshotPng } from "./capture/screenshot.js";
 import { clickRef, findRefByText, openUrl, snapshotAi } from "./executor/textClick.js";
+import { executePlan } from "./executor/executePlan.js";
+import { requiredConfirmationForPlan, validateUserConfirmation } from "./policies/confirm.js";
+import type { Plan } from "./types/actionDsl.js";
 
 const app = express();
 app.use(express.json({ limit: "10mb" }));
@@ -46,11 +49,19 @@ app.get("/", (_req, res) => {
     <h2>Result</h2>
     <pre id="out">—</pre>
 
+    <div class="row" style="margin-top: 12px;">
+      <input id="confirm" placeholder="Type OK or OK SUBMIT" style="flex: 1; padding: 6px;" />
+      <button id="btnExecute" type="button">Execute last plan</button>
+    </div>
+
     <script>
       const form = document.getElementById('f');
       const out = document.getElementById('out');
+      let lastResponse = null;
+
       async function showResult(r) {
         const j = await r.json();
+        lastResponse = j;
         out.textContent = JSON.stringify(j, null, 2);
       }
 
@@ -104,6 +115,17 @@ app.get("/", (_req, res) => {
         const r = await fetch('/api/demo/github-issues', { method: 'POST' });
         await showResult(r);
       });
+
+      document.getElementById('btnExecute').addEventListener('click', async () => {
+        out.textContent = 'Executing…';
+        const confirmation = document.getElementById('confirm').value;
+        const r = await fetch('/api/execute', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ response: lastResponse, confirmation })
+        });
+        await showResult(r);
+      });
     </script>
   </body>
 </html>`);
@@ -151,6 +173,24 @@ app.post("/api/demo/github-issues", async (_req, res) => {
   } catch (e: any) {
     res.status(500).json({ ok: false, error: String(e?.message ?? e) });
   }
+});
+
+app.post("/api/execute", async (req, res) => {
+  // Execute the machine plan embedded in the last response, guarded by confirm policy.
+  const bodySchema = z.object({ response: z.any(), confirmation: z.string().default("") });
+  const { response, confirmation } = bodySchema.parse(req.body ?? {});
+
+  const plan: Plan | undefined = response?.plan;
+  if (!plan) return res.status(400).json({ ok: false, error: "No plan present in response. Create a plan first." });
+
+  const required = requiredConfirmationForPlan(plan);
+  const decision = validateUserConfirmation(confirmation, required);
+  if (!decision.ok) return res.status(400).json({ ok: false, error: decision.reason, required });
+
+  const execRes = await executePlan(plan);
+  if (!execRes.ok) return res.status(500).json(execRes);
+
+  res.json({ ok: true, executed: plan.summary, targetId: execRes.targetId });
 });
 
 const port = Number(process.env.PORT ?? 8787);
