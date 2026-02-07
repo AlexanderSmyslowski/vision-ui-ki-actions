@@ -2,11 +2,19 @@
 -- Starts the local server in Terminal and opens the UI in the default browser.
 
 on run
-	set appBundle to POSIX path of (path to me)
-	set repoDir to do shell script "cd " & quoted form of (appBundle & "/../..") & "; pwd"
+	set appSupportDir to POSIX path of (path to library folder from user domain) & "Application Support/Vision UI Actions"
+	set repoDir to appSupportDir
 	set startScript to repoDir & "/scripts/mac/start_server.sh"
 	set portStr to "8787"
 	set localUrl to "http://localhost:" & portStr
+
+	-- Validate install
+	try
+		do shell script "test -d " & quoted form of repoDir
+	on error
+		display dialog "Repo not found. Please run scripts/mac/install_app.command once." buttons {"OK"} default button "OK"
+		return
+	end try
 
 	tell application "Terminal"
 		activate

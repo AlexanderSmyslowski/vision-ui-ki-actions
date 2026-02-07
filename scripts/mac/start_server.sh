@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="/Users/hans_clawbot/.openclaw/workspace/vision-ui-ki-actions"
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 PORT="${PORT:-8787}"
 
 cd "$REPO_DIR"
