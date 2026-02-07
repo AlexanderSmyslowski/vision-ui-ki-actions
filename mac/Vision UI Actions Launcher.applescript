@@ -2,7 +2,8 @@
 -- Starts the local server in Terminal and opens the UI in the default browser.
 
 on run
-	set repoDir to "/Users/hans_clawbot/.openclaw/workspace/vision-ui-ki-actions"	
+	set appBundle to POSIX path of (path to me)
+	set repoDir to do shell script "cd " & quoted form of (appBundle & "/../..") & "; pwd"
 	set startScript to repoDir & "/scripts/mac/start_server.sh"
 	set portStr to "8787"
 	set localUrl to "http://localhost:" & portStr
@@ -18,8 +19,6 @@ on run
 		delay 1.0
 	end tell
 
-	tell application "Safari"
-		activate
-		open location localUrl
-	end tell
+	-- Open in default browser (avoid Safari dependency)
+	do shell script "open " & quoted form of localUrl
 end run
