@@ -206,28 +206,56 @@ app.post("/api/demo/amazon-search", async (_req, res) => {
       // ignore
     }
 
-    // Focus search box
-    const snap2 = await snapshotAi(targetId || undefined);
-    const searchRef =
-      (() => {
-        try {
-          return findRefByText(snap2, "Suche", ["textbox", "combobox", "searchbox"]);
-        } catch {
-          return findRefByText(snap2, "Search", ["textbox", "combobox", "searchbox"]);
-        }
-      })();
-
-    // click, type, enter
-    await clickRef(searchRef, targetId || undefined);
-    // openclaw browser type
     const { runOpenclawBrowser } = await import("./executor/openclawBrowser.js");
-    const args = ["type", searchRef, query];
-    if (targetId) args.push("--target-id", targetId);
-    await runOpenclawBrowser(args, { timeoutMs: 60000 });
 
+    // Focus search box (prefer CSS selector; more stable than text)
+    // Amazon search input id is usually: #twotabsearchtextbox
+    await runOpenclawBrowser([
+      "wait",
+      "#twotabsearchtextbox",
+      ...(targetId ? (["--target-id", targetId] as string[]) : []),
+      "--timeout-ms",
+      "20000",
+    ]);
+
+    // Click search box by ref from snapshot (text-based fallback)
+    let searchRef: string | null = null;
+    try {
+      const snap2 = await snapshotAi(targetId || undefined);
+      searchRef = findRefByText(snap2, "Amazon.de durchsuchen", ["textbox", "combobox", "searchbox", "button"]);
+    } catch {
+      // ignore
+    }
+
+    if (searchRef) {
+      await clickRef(searchRef, targetId || undefined);
+      const args = ["type", searchRef, query];
+      if (targetId) args.push("--target-id", targetId);
+      await runOpenclawBrowser(args, { timeoutMs: 60000 });
+    } else {
+      // Direct CSS evaluate fallback: focus + type via browser evaluate
+      const evalFn = `({}) => {
+        const el = document.querySelector('#twotabsearchtextbox');
+        if (!el) return { ok:false, error:'no search box' };
+        el.focus();
+        el.value = ${JSON.stringify(query)};
+        el.dispatchEvent(new Event('input', { bubbles:true }));
+        return { ok:true };
+      }`;
+      const args = ["evaluate", "--fn", evalFn];
+      if (targetId) args.push("--target-id", targetId);
+      await runOpenclawBrowser(args, { timeoutMs: 60000 });
+    }
+
+    // Press Enter
     const args2 = ["press", "Enter"];
     if (targetId) args2.push("--target-id", targetId);
     await runOpenclawBrowser(args2, { timeoutMs: 60000 });
+
+    // Wait for results URL change (best-effort)
+    const waitArgs = ["wait", "--load", "networkidle", "--timeout-ms", "20000"];
+    if (targetId) waitArgs.push("--target-id", targetId);
+    await runOpenclawBrowser(waitArgs, { timeoutMs: 60000 });
 
     res.json({ ok: true, demo: "amazon-search", url, query, targetId });
   } catch (e: any) {
